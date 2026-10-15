@@ -1,0 +1,8 @@
+node_modules
+.vercel
+dist
+screenshots
+artifacts
+*.log
+.grok/*
+!.grok/app-env.json

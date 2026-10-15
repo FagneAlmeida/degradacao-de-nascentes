@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sans: "Outfit", system-ui, sans-serif;
+
+  --color-paper: #efe6d6;
+  --color-card: #f7f1e6;
+  --color-ink: #241c14;
+  --color-muted: #5e5348;
+  --color-line: #ddcfba;
+  --color-canopy: #1d6a42;
+  --color-clay: #a15c32;
+  --color-spring: #1a7380;
+
+  --shadow-card: 0 12px 32px rgba(36, 28, 20, 0.06);
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.5;
+    min-height: 100%;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    line-height: 1.15;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-canopy);
+    outline-offset: 2px;
+  }
+}
+
+.rain-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 2.75rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rain-range:disabled {
+  cursor: default;
+}
+
+.rain-range::-webkit-slider-runnable-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--color-line);
+}
+
+.rain-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 1.75rem;
+  width: 1.75rem;
+  margin-top: -0.65rem;
+  border-radius: 999px;
+  background: var(--color-canopy);
+  border: 3px solid var(--color-card);
+  box-shadow: 0 1px 2px rgba(36, 28, 20, 0.25);
+}
+
+.rain-range::-moz-range-track {
+  height: 0.45rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-line);
+}
+
+.rain-range::-moz-range-thumb {
+  height: 1.75rem;
+  width: 1.75rem;
+  border-radius: 999px;
+  background: var(--color-canopy);
+  border: 3px solid var(--color-card);
+}
+
+.spring-eye {
+  box-shadow: inset 0 6px 10px rgba(255, 255, 255, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
