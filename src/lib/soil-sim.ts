@@ -7,6 +7,9 @@ export type PlotModel = {
   pond: number;
   clarity: number;
   wetness: number;
+  canopy: number;
+  seal: number;
+  loose: number;
   cumRain: number;
   cumInfil: number;
   cumRunoff: number;
@@ -30,6 +33,9 @@ export function createPlot(kind: PlotKind): PlotModel {
     pond: 0,
     clarity: 0.94,
     wetness: kind === "covered" ? 0.18 : 0.08,
+    canopy: 0,
+    seal: 0,
+    loose: 0,
     cumRain: 0,
     cumInfil: 0,
     cumRunoff: 0,
@@ -45,56 +51,81 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-/** `rain` is 0–1. `dt` is seconds. Covered and bare share the same rain. */
+/** `rain` is 0–1. `dt` is seconds of class time, shown as minutes of storm. */
 export function stepPlot(plot: PlotModel, rain: number, stress: Stress, dt: number) {
   const covered = plot.kind === "covered";
   const cattle = !covered && stress.cattle;
   const tillage = !covered && stress.tillage;
 
-  const evap = covered ? 0.1 : 0.02;
-  const available = Math.max(0, rain * (1 - evap));
+  let through = rain;
+  if (covered) {
+    const caught = rain * (1 - plot.canopy) * 0.9;
+    const evap = plot.canopy * 0.02;
+    plot.canopy = clamp(plot.canopy + (caught * 3.2 - evap) * dt, 0, 1);
+    through = Math.max(0, rain - caught);
+  } else if (plot.canopy > 0) {
+    plot.canopy = 0;
+  }
 
-  let capacity = covered ? 0.96 : 0.2;
-  if (cattle) capacity *= 0.42;
-  if (tillage) capacity *= 0.75;
-  capacity *= 0.62 + 0.38 * plot.integrity;
+  const impact = covered ? through * 0.12 : through;
+  const sealGain = impact * (covered ? 0.015 : cattle ? 0.55 : 0.32);
+  const sealLoss = plot.seal * (covered ? 0.09 : 0.008);
+  plot.seal = clamp(plot.seal + (sealGain - sealLoss) * dt, 0, 1);
 
-  const infil = Math.min(available, capacity);
-  const runoff = Math.max(0, available - infil);
+  let capacity = covered ? 0.9 : 0.46;
+  if (!covered) capacity *= 1 - 0.7 * plot.seal;
+  if (cattle) capacity *= 0.4;
+  if (tillage) capacity *= 0.78;
+  capacity *= 1 - plot.wetness * (covered ? 0.12 : 0.38);
+  capacity *= 0.58 + 0.42 * plot.integrity;
 
-  let erod = covered ? 0.08 : 0.82;
-  if (cattle) erod *= 1.35;
-  if (tillage) erod *= 1.7;
-  erod *= 1.15 - 0.55 * plot.integrity;
-  const impact = covered ? 0.18 : 1;
-  const sediment = runoff * erod * impact * (0.35 + rain * 0.65);
+  const infil = Math.min(through, Math.max(0, capacity));
+  const runoff = Math.max(0, through - infil);
 
-  const unit = 5.4;
+  const detach =
+    impact *
+    (covered ? 0.035 : 0.62) *
+    (1.15 - 0.6 * plot.integrity) *
+    (cattle ? 1.25 : 1) *
+    (tillage ? 1.45 : 1);
+  plot.loose = clamp(plot.loose + detach * dt, 0, 1);
+  const transport = runoff * (0.35 + plot.loose * 0.9) * (covered ? 0.22 : 1) * (tillage ? 1.55 : 1);
+  const sediment = Math.min(plot.loose / Math.max(dt, 0.001), transport);
+  plot.loose = clamp(plot.loose - sediment * dt, 0, 1);
+
+  const unit = 4.6;
   plot.cumRain += rain * unit * dt;
   plot.cumInfil += infil * unit * dt;
   plot.cumRunoff += runoff * unit * dt;
-  plot.cumSediment += sediment * 9.2 * dt;
+  plot.cumSediment += sediment * 7.4 * dt;
 
-  plot.integrity = clamp(plot.integrity - sediment * 0.03 * dt, 0.07, 1);
+  plot.integrity = clamp(
+    plot.integrity - sediment * 0.09 * dt - (tillage ? runoff * 0.02 * dt : 0),
+    0.08,
+    1,
+  );
 
-  const recharge = infil * (covered ? 0.34 : 0.06);
-  plot.storage = clamp(plot.storage + (recharge - plot.storage * 0.012) * dt, 0, 1);
-  plot.pond = clamp(plot.pond + runoff * 0.85 * dt - plot.pond * 0.55 * dt, 0, 1);
+  const recharge = infil * (covered ? 0.4 : 0.07);
+  const baseOut = plot.storage * (covered ? 0.05 : 0.018);
+  plot.storage = clamp(plot.storage + (recharge - baseOut) * dt, 0, 1);
+  const pondDrain = covered ? 0.4 : 0.62;
+  plot.pond = clamp(plot.pond + runoff * 0.95 * dt - plot.pond * pondDrain * dt, 0, 1);
 
-  plot.flowRate = plot.storage * 0.64 + plot.pond * (covered ? 0.1 : 1);
+  const baseflow = plot.storage * (covered ? 0.72 : 0.26);
+  const quick = plot.pond * (covered ? 0.1 : 0.9);
+  plot.flowRate = clamp(baseflow + quick, 0, 1.25);
   plot.infilRate = infil;
   plot.runoffRate = runoff;
   plot.sedRate = sediment;
 
-  const mud = sediment * (covered ? 0.45 : 3.1) + plot.pond * (covered ? 0.02 : 0.35);
-  const recover = (1 - plot.clarity) * (covered ? 0.08 : 0.015);
-  plot.clarity = clamp(plot.clarity + (recover - mud * 0.55) * dt, 0.05, 1);
+  const conc = sediment * (covered ? 0.35 : 2.6) + plot.pond * plot.loose * (covered ? 0.04 : 0.85);
+  const settle = (1 - plot.clarity) * (covered ? 0.09 : 0.012 + (1 - plot.pond) * 0.02);
+  let clarity = plot.clarity + (settle - conc * 0.5) * dt;
+  if (cattle && (runoff > 0.04 || plot.pond > 0.04)) clarity -= 0.07 * dt;
+  plot.clarity = clamp(clarity, 0.05, 1);
 
-  if (rain > 0.02) {
-    plot.wetness = clamp(plot.wetness + (infil * 0.9 + runoff * 0.45) * dt, 0, 1);
-  } else {
-    plot.wetness = clamp(plot.wetness - 0.045 * dt, 0, 1);
-  }
+  const wetIn = infil * 0.85 + runoff * (covered ? 0.08 : 0.3);
+  plot.wetness = clamp(plot.wetness + (wetIn - 0.035) * dt, 0, 1);
 }
 
 export function springPhrase(plot: PlotModel): string {

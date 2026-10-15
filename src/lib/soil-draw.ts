@@ -6,7 +6,7 @@ export const VH = 450;
 const SPRING_X = 608;
 const BOWL = 84;
 
-export type Drop = { x: number; y: number; vy: number; len: number };
+export type Drop = { x: number; y: number; vy: number; len: number; drip: boolean };
 export type Grain = { x: number; y: number; vx: number; r: number; shade: number };
 export type Fragment = {
   x: number;
@@ -189,13 +189,15 @@ export function stepVisual(
   dt: number,
 ) {
   const covered = plot.kind === "covered";
-  const targetDrops = Math.floor(rain * (covered ? 70 : 100));
+  const reaching = covered ? rain * (0.22 + 0.78 * plot.canopy) : rain;
+  const targetDrops = Math.floor(reaching * 72);
   while (visual.drops.length < targetDrops) {
     visual.drops.push({
       x: Math.random() * (VW + 40) - 20,
-      y: -Math.random() * 160,
-      vy: 420 + Math.random() * 260,
-      len: 12 + Math.random() * 14,
+      y: -Math.random() * 140,
+      vy: 380 + Math.random() * 220,
+      len: 11 + Math.random() * 12,
+      drip: false,
     });
   }
   if (visual.drops.length > targetDrops) {
@@ -205,37 +207,46 @@ export function stepVisual(
   for (let i = visual.drops.length - 1; i >= 0; i--) {
     const drop = visual.drops[i];
     drop.y += drop.vy * dt;
-    drop.x -= 28 * dt;
-    if (covered && drop.y > groundY(drop.x, plot.integrity, false) - 78 && Math.random() < 0.35) {
-      visual.splashes.push({
-        x: drop.x,
-        y: drop.y,
-        life: 0.22,
-        max: 0.22,
-        dirt: false,
-      });
-      visual.drops.splice(i, 1);
-      continue;
+    drop.x -= (drop.drip ? 8 : 26) * dt;
+    const canopyY = groundY(drop.x, plot.integrity, false) - 78;
+    if (covered && !drop.drip && drop.y > canopyY) {
+      if (Math.random() > 0.2 + plot.canopy * 0.72) {
+        if (visual.splashes.length < 36) {
+          visual.splashes.push({ x: drop.x, y: drop.y, life: 0.18, max: 0.18, dirt: false });
+        }
+        visual.drops.splice(i, 1);
+        continue;
+      }
+      drop.drip = true;
+      drop.vy *= 0.45;
+      drop.len *= 0.55;
     }
     const gy = groundY(drop.x, plot.integrity, tillage && !covered);
     if (drop.y >= gy) {
-      visual.splashes.push({
-        x: drop.x,
-        y: gy,
-        life: covered ? 0.18 : 0.32,
-        max: covered ? 0.18 : 0.32,
-        dirt: !covered,
-      });
-      if (!covered && plot.sedRate > 0.05 && visual.grains.length < 90 && Math.random() < 0.55) {
+      if (visual.splashes.length < 36) {
+        visual.splashes.push({
+          x: drop.x,
+          y: gy,
+          life: covered ? 0.16 : 0.28,
+          max: covered ? 0.16 : 0.28,
+          dirt: !covered && plot.loose > 0.04,
+        });
+      }
+      if (!covered && plot.loose > 0.05 && visual.grains.length < 64 && Math.random() < 0.35) {
         visual.grains.push({
           x: drop.x,
           y: gy - 2,
-          vx: 40 + Math.random() * 50,
-          r: 1.4 + Math.random() * 2.2,
+          vx: plot.runoffRate > 0.08 ? 24 + plot.runoffRate * 70 : 4 + Math.random() * 8,
+          r: 1.3 + Math.random() * 1.8,
           shade: Math.random(),
         });
       }
-      if (plot.sedRate > 0.08 && visual.fragments.length < (covered ? 6 : 36) && Math.random() < (covered ? 0.04 : 0.45)) {
+      const fragCap = covered ? 5 : 28;
+      if (
+        plot.sedRate > 0.06 &&
+        visual.fragments.length < fragCap &&
+        Math.random() < (covered ? 0.03 : 0.22)
+      ) {
         visual.fragments.push(spawnFragment(Math.random(), drop.x, gy - 6, covered));
       }
       visual.drops.splice(i, 1);
@@ -250,6 +261,7 @@ export function stepVisual(
     const g = visual.grains[i];
     g.x += g.vx * dt;
     g.y = gyOf(g.x) - g.r;
+    g.vx = plot.runoffRate > 0.08 ? 22 + plot.runoffRate * 75 : Math.max(2, g.vx * 0.92);
     if (g.x > SPRING_X - 10) visual.grains.splice(i, 1);
   }
 
@@ -266,7 +278,7 @@ export function stepVisual(
         if (covered) f.vx *= 0.25;
       }
     } else {
-      f.vx = covered ? Math.max(4, f.vx * 0.98) : 28 + (1 - plot.integrity) * 55;
+      f.vx = (covered ? Math.max(3, f.vx * 0.98) : (16 + (1 - plot.integrity) * 40) * (0.2 + plot.runoffRate));
       f.x += f.vx * dt;
       f.y = gyOf(f.x) - f.size * 0.35;
       if (covered && Math.random() < dt * 0.4) {
@@ -522,6 +534,15 @@ export function drawScene(
   const wet = covered ? "#2a1c12" : "#6e4a2c";
   ctx.fillStyle = mix(dry, wet, plot.wetness);
   ctx.fill();
+
+  if (!covered && plot.seal > 0.18) {
+    ctx.beginPath();
+    ctx.moveTo(0, groundY(0, integrity, tillage) + 1);
+    for (let x = 0; x <= SPRING_X - 20; x += 8) ctx.lineTo(x, groundY(x, integrity, tillage) + 1.5);
+    ctx.strokeStyle = `rgba(92, 70, 48, ${0.15 + plot.seal * 0.45})`;
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+  }
 
   for (const s of visual.specks) {
     if (s.y < groundY(s.x, integrity, tillage)) continue;

@@ -66,7 +66,7 @@ function lecture(
   if (!raining) {
     return "A chuva parou, mas o estrago fica. Com mata, a nascente segue límpida: a água que infiltrou ainda alimenta o lençol. No solo nu, o fluxo cai e o barro assoreia o olho d'água.";
   }
-  return "Mesma chuva nos dois lados. Na mata, a copa quebra a gota, as raízes seguram o solo e a água recarrega o lençol. No solo exposto, ela escorre, arranca fragmentos e turva a nascente.";
+  return "Mesma chuva nos dois lados. A copa segura a garoa e amortece a gota. No solo nu a superfície sela, a água escorre, arranca fragmentos e turva a nascente.";
 }
 
 function communityUse(
@@ -370,7 +370,7 @@ export function Simulator() {
           </button>
           <p className="text-sm text-muted">
             {snap.raining
-              ? `${Math.floor(snap.elapsed)} s de chuva`
+              ? `${Math.max(1, Math.floor(snap.elapsed))} min de chuva`
               : snap.elapsed > 0.4
                 ? "Chuva pausada"
                 : "À espera da chuva"}
@@ -496,8 +496,8 @@ export function Simulator() {
           <li>Pare a chuva e compare a cor e a força de cada nascente.</li>
         </ul>
         <p className="mt-3 text-xs leading-relaxed text-muted">
-          Índices relativos, com a mesma chuva nos dois lados. Servem para comparar
-          na aula — não são milímetros medidos no campo.
+          Cada segundo da aula vale cerca de um minuto de chuva. Os índices comparam
+          os dois lados — não são milímetros medidos no campo.
         </p>
       </section>
     </main>
@@ -532,6 +532,19 @@ function Stage({
   use: string;
 }) {
   const muddy = plot.clarity < 0.55;
+  const share = plot.cumRain > 0.5 ? Math.round((plot.cumRunoff / plot.cumRain) * 100) : null;
+  const soil =
+    plot.kind === "bare" && plot.seal > 0.45 && plot.integrity > 0.72
+      ? "Superfície selada"
+      : soilPhrase(plot);
+  const note =
+    plot.kind === "covered" && plot.canopy > 0.45
+      ? "Copa molhada — a gota chega mais fraca"
+      : plot.kind === "bare" && plot.seal > 0.45
+        ? "A crosta fechou os poros"
+        : share !== null
+          ? `${share}% da chuva escorreu`
+          : "";
   return (
     <article className="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -559,7 +572,7 @@ function Stage({
         )}
         <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
           <span className="max-w-40 rounded-full bg-card px-3 py-1 text-xs font-medium text-ink sm:text-sm">
-            {soilPhrase(plot)}
+            {soil}
           </span>
           <span
             className={
@@ -590,7 +603,9 @@ function Stage({
         <Stat label="Sedimentos" value={plot.cumSediment} max={maxSed} tone={tone} />
         <p className="text-sm text-muted">
           Clareza da água {fmt(plot.clarity * 100)}% · vazão {fmt(plot.flowRate * 100)}
+          {share !== null ? ` · ${share}% escorreu` : ""}
         </p>
+        {note ? <p className="text-sm text-ink">{note}</p> : null}
       </div>
     </article>
   );
