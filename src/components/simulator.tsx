@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { CloudRain, Footprints, RotateCcw, Shovel, TreePine } from "lucide-react";
+import { BookOpen, CloudRain, Footprints, RotateCcw, Shovel, TreePine } from "lucide-react";
 import {
   createPlot,
   rainLabel,
@@ -9,6 +9,7 @@ import {
   type PlotModel,
 } from "@/lib/soil-sim";
 import { createVisual, drawScene, stepVisual, type Visual } from "@/lib/soil-draw";
+import { Manual } from "@/components/manual";
 
 type Hist = {
   flowA: number[];
@@ -222,6 +223,7 @@ export function Simulator() {
       histRef.current,
     ),
   );
+  const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
     motionRef.current = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -368,6 +370,16 @@ export function Simulator() {
             <RotateCcw className="size-4" aria-hidden="true" />
             Recomeçar
           </button>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={manualOpen}
+            onClick={() => setManualOpen(true)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-card px-4 text-sm font-medium text-ink"
+          >
+            <BookOpen className="size-4" aria-hidden="true" />
+            Manual
+          </button>
           <p className="text-sm text-muted">
             {snap.raining
               ? `${Math.max(1, Math.floor(snap.elapsed))} min de chuva`
@@ -500,6 +512,7 @@ export function Simulator() {
           os dois lados — não são milímetros medidos no campo.
         </p>
       </section>
+      <Manual open={manualOpen} onClose={() => setManualOpen(false)} />
     </main>
   );
 }
